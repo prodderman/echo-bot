@@ -1,0 +1,6 @@
+{
+  "helpText": "Hello! My name is MetaStas and I'm a bot.\nI just repeat the messages you send.\n\nYou can set the number of repetitions with the command /repeat",
+  "unknownCommandText": "I don't understand :(",
+  "repeatText": "How many times do I have to repeat?",
+  "initialRepetitions": 1
+}
