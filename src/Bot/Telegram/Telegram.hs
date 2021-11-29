@@ -34,7 +34,7 @@ instance Bot (TelegramBotT Context) Int T.Message T.Help T.Repeat T.Select T.Unk
       Left  e -> error e
       Right (Res.GetUpdatesResponse updates) -> do
         liftIO $ print updates
-        return (nextLastUpdateId, commands)
+        pure (nextLastUpdateId, commands)
        where
         commands = foldr
           (\(Res.UpdateEvent updateId content) commands -> case content of
@@ -51,8 +51,9 @@ instance Bot (TelegramBotT Context) Int T.Message T.Help T.Repeat T.Select T.Unk
           updates
 
         nextLastUpdateId = if (not . null) updates
-          then Res.updateId (last updates) + 1
+          then getId (last updates) + 1
           else lastUpdateId
+          where getId (Res.UpdateEvent id _) = id
 
         identifyCommand chatId msg = case msg of
           "/help"   -> BotT.Help (T.Help chatId)
@@ -72,7 +73,7 @@ instance Bot (TelegramBotT Context) Int T.Message T.Help T.Repeat T.Select T.Unk
     initialNumberOfRepetitions <- asks $ BotT.initialRepetitions . BotT.config
     times                      <- lift $ gets $ \s ->
       fromMaybe initialNumberOfRepetitions (DM.lookup chatId s)
-    liftIO $ forM_ [1 .. times] $ \_ -> Req.sendMessage token chatId text
+    liftIO $ replicateM_ times (Req.sendMessage token chatId text)
   echoMessage (T.Sticker chatId stickerId) = do
     token                      <- lift $ asks getToken
     initialNumberOfRepetitions <- asks $ BotT.initialRepetitions . BotT.config
@@ -84,19 +85,19 @@ instance Bot (TelegramBotT Context) Int T.Message T.Help T.Repeat T.Select T.Unk
     token    <- lift $ asks getToken
     helpText <- asks $ BotT.helpText . BotT.config
     liftIO $ Req.sendMessage token chatId helpText
-    return ()
+    pure ()
 
   handleUnknownCommand (T.UnknownCommand chatId) = do
     token    <- lift $ asks getToken
     helpText <- asks $ BotT.unknownCommandText . BotT.config
     liftIO $ Req.sendMessage token chatId helpText
-    return ()
+    pure ()
 
   askForNumberOfRepetitions (T.Repeat chatId) = do
     token      <- lift $ asks getToken
     repeatText <- asks $ BotT.repeatText . BotT.config
     liftIO $ Req.sendKeyboardLayout token chatId repeatText [[1, 2, 3], [4, 5]]
-    return ()
+    pure ()
 
   saveNumberOfRepetitions (T.Select _ chatId times) =
     lift $ modify $ DM.insert chatId times
@@ -104,7 +105,7 @@ instance Bot (TelegramBotT Context) Int T.Message T.Help T.Repeat T.Select T.Unk
   confirmNumberOfRepetitions (T.Select callbackId _ times) = do
     token <- lift $ asks getToken
     liftIO $ Req.sendConfirmation token callbackId (makeText times)
-    return ()
+    pure ()
    where
     makeText 1 = "Now I will repeat only once"
     makeText 2 = "Now I will repeat twice"
@@ -116,5 +117,5 @@ runTelegramBot env = do
   config <- liftIO readConfig
   let bot = unTelegramBotT (runBot 0) :: ReaderT BotT.Env Context ()
   runStateT (runReaderT (runReaderT bot env) config) mempty
-  return ()
+  pure ()
 

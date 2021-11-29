@@ -35,20 +35,19 @@ instance Bot (VKBotT Context) (Maybe T.PollServer) T.Message T.Help T.Repeat T.S
     case Res.parseGetPollServerResponse response of
       Left e -> error e
       Right (Res.LongPollServerResponse server key timestamp) ->
-        return (Just (T.PollServer server key timestamp), [])
+        pure (Just (T.PollServer server key timestamp), [])
   getCommand (Just (T.PollServer server key timestamp)) = do
     response <- liftIO $ Req.getUpdates server key timestamp
-
     case Res.parseGetGetUpdates response of
       Left  e -> error e
       Right (Res.EventsUpdateFail (Res.OutOfDate newTimestamp)) -> do
-        return (Just (T.PollServer server key newTimestamp), [])
-      Right (Res.EventsUpdateFail Res.KeyExpired) -> return (Nothing, [])
+        pure (Just (T.PollServer server key newTimestamp), [])
+      Right (Res.EventsUpdateFail Res.KeyExpired) -> pure (Nothing, [])
       Right (Res.EventsUpdateFail _) ->
-        return (Just (T.PollServer server key timestamp), [])
+        pure (Just (T.PollServer server key timestamp), [])
       Right (Res.EventsUpdateSuccess newTimestamp events) -> do
         liftIO $ print events
-        return (Just (T.PollServer server key newTimestamp), commands)
+        pure (Just (T.PollServer server key newTimestamp), commands)
        where
         commands = foldr
           (\event commands -> case event of
@@ -74,33 +73,36 @@ instance Bot (VKBotT Context) (Maybe T.PollServer) T.Message T.Help T.Repeat T.S
     initial <- asks $ BotT.initialRepetitions . BotT.config
     times   <- lift $ gets $ \s -> fromMaybe initial (DM.lookup userId s)
     liftIO $ print times
-    liftIO $ forM_ [1 .. times] $ \_ -> do
-      randomId <- liftIO randomIO
-      Req.sendMessage token userId randomId msg stickerId
+    liftIO $ replicateM_
+      times
+      (do
+        randomId <- liftIO randomIO
+        Req.sendMessage token userId randomId msg stickerId
+      )
   showDescription (T.Help userId) = do
     randomId <- liftIO randomIO
     token    <- lift $ asks getToken
     helpText <- asks $ BotT.helpText . BotT.config
     liftIO $ Req.sendMessage token userId randomId helpText Nothing
-    return ()
+    pure ()
   handleUnknownCommand (T.UnknownCommand userId) = do
     randomId <- liftIO randomIO
     token    <- lift $ asks getToken
     helpText <- asks $ BotT.unknownCommandText . BotT.config
     liftIO $ Req.sendMessage token userId randomId helpText Nothing
-    return ()
+    pure ()
   askForNumberOfRepetitions (T.Repeat userId) = do
     randomId   <- liftIO randomIO
     token      <- lift $ asks getToken
     repeatText <- asks $ BotT.repeatText . BotT.config
     liftIO $ Req.sendKeyboard token userId randomId repeatText [[1, 2, 3, 4, 5]]
-    return ()
+    pure ()
   confirmNumberOfRepetitions (T.Select userId times) = do
     randomId <- liftIO randomIO
     token    <- lift $ asks getToken
     helpText <- asks $ BotT.helpText . BotT.config
     liftIO $ Req.sendMessage token userId randomId (makeText times) Nothing
-    return ()
+    pure ()
    where
     makeText 1 = "Now I will repeat only once"
     makeText 2 = "Now I will repeat twice"
@@ -113,4 +115,4 @@ runVKBot env = do
   config <- liftIO readConfig
   let bot = unVKBotT (runBot Nothing) :: ReaderT BotT.Env Context ()
   runStateT (runReaderT (runReaderT bot env) config) mempty
-  return ()
+  pure ()

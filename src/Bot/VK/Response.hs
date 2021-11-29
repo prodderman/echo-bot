@@ -1,12 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Bot.VK.Response where
-import           Bot.Helpers
 import           Control.Applicative
 import           Control.Monad
 import           Data.Aeson.Types
 import           Data.Bits
+import           Data.Maybe
 import           Network.HTTP.Req
+import           Text.Read                      ( readMaybe )
+
+import           Bot.Helpers
 
 data LongPollServerResponse = LongPollServerResponse String String Int
 
@@ -16,45 +19,32 @@ instance FromJSON LongPollServerResponse where
     serverUrl <- response .: "server"
     key       <- response .: "key"
     timestamp <- response .: "ts"
-    return $ LongPollServerResponse ("https://" ++ serverUrl) key timestamp
+    pure $ LongPollServerResponse ("https://" ++ serverUrl) key timestamp
 
 data UpdateEvent = NewMessage Int String (Maybe Int) | Answer Int Int | Others deriving Show
-data UpdateError = OutOfDate Int | KeyExpired | InfoLost | InvalidVersion Int Int | UnknownError deriving Show
+data UpdateError = OutOfDate Int | KeyExpired | UnknownError deriving Show
 data EventsUpdateResponse = EventsUpdateSuccess Int [UpdateEvent] | EventsUpdateFail UpdateError deriving Show
 
 instance FromJSON EventsUpdateResponse where
   parseJSON = withObject "EventsUpdateResponse" $ \o -> do
     timestamp <- o .:? "ts"
     case timestamp of
-      Nothing -> do
-        error <- parseError o
-        return $ EventsUpdateFail error
-      Just timestamp -> do
-        updates <- mapM parseSuccess =<< o .: "updates"
-        return $ EventsUpdateSuccess timestamp updates
+      Nothing -> EventsUpdateFail <$> parseError o
+      Just timestamp ->
+        EventsUpdateSuccess timestamp <$> (mapM parseSuccess =<< o .: "updates")
    where
     parseError :: Object -> Parser UpdateError
     parseError o = do
       code <- o .: "failed" :: Parser Int
       case code of
-        1 -> do
-          timestamp <- o .: "ts"
-          return $ OutOfDate timestamp
-        2 -> return KeyExpired
-        3 -> return InfoLost
-        4 -> do
-          minVersion <- o .: "min_version"
-          maxVersion <- o .: "max_version"
-          return $ InvalidVersion minVersion maxVersion
-        _ -> return UnknownError
+        1 -> OutOfDate <$> o .: "ts"
+        2 -> pure KeyExpired
+        _ -> pure UnknownError
 
     parseSuccess :: [Value] -> Parser UpdateEvent
-    parseSuccess event = do
-      case head event of
-        Number 4 -> case parseEither parseNewMessage event of
-          Left  _ -> pure Others
-          Right r -> pure r
-        _ -> pure Others
+    parseSuccess event = pure $ case head event of
+      Number 4 -> fromMaybe Others $ parseMaybe parseNewMessage event
+      _        -> Others
      where
       parseNewMessage [_, _, flagV, userIdV, _, _, messageV, Object payload] =
         do
@@ -75,12 +65,12 @@ instance FromJSON EventsUpdateResponse where
         mediaType <- o .:? "attach1_type" :: Parser (Maybe String)
         case mediaType of
           Just t -> case t of
-            "sticker" -> (fmap . fmap) read (o .:? "attach1")
-            _         -> return Nothing
-          Nothing -> return Nothing
+            "sticker" -> (>>= readMaybe) <$> (o .:? "attach1")
+            _         -> pure Nothing
+          Nothing -> pure Nothing
 
       parseAnswer :: Object -> Parser (Maybe Int)
-      parseAnswer o = (fmap . fmap) read (o .:? "payload")
+      parseAnswer o = (>>= readMaybe) <$> (o .:? "payload")
 
 
 
