@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Bot.VK.VK where
 import           Control.Monad.Reader
@@ -22,12 +23,12 @@ import qualified Bot.VK.Types                  as T
 
 newtype VKBotT a = VKBotT {
   unVKBotT :: ReaderT T.LocalEnv IO a
-} deriving (Functor, Applicative, Monad, MonadIO)
+} deriving (Functor, Applicative, Monad, MonadIO, MonadReader T.LocalEnv)
 
 instance Bot VKBotT (Maybe T.PollServer) T.Message where
   getUpdates Nothing = do
-    token    <- lift $ asks getToken
-    groupId  <- lift $ asks getGroupId
+    token    <- asks getToken
+    groupId  <- asks getGroupId
     response <- liftIO $ Req.getLongPollServer token groupId
     case Res.parseGetPollServerResponse response of
       Left e -> error e
@@ -48,57 +49,35 @@ instance Bot VKBotT (Maybe T.PollServer) T.Message where
        where
         messages = foldr
           (\event messages -> case event of
-            Res.NewMessage userId msg sticker ->
-              identifyCommand userId msg sticker : messages
+            Res.NewMessage userId msg Nothing ->
+              BotT.Message (show userId) msg (T.Text userId T.Empty) : messages
+            Res.NewMessage userId msg (Just stickerId) ->
+              BotT.Message (show userId)
+                           msg
+                           (T.Text userId (T.Sticker stickerId))
+                : messages
             Res.Answer userId times ->
-              BotT.Select (T.Select userId times) : messages
-            _ -> messages
+              BotT.Answer (show userId) times (T.Text userId T.Empty) : messages
+            Res.Others -> messages
           )
           []
           events
-  sendMessage = undefined
 
-  -- echoMessage (T.Text userId msg stickerId) = do
-  --   token   <- lift $ asks getToken
-  --   initial <- asks $ BotT.initialRepetitions . BotT.config
-  --   times   <- lift $ gets $ \s -> fromMaybe initial (DM.lookup userId s)
-  --   liftIO $ print times
-  --   liftIO $ replicateM_
-  --     times
-  --     (do
-  --       randomId <- liftIO randomIO
-  --       Req.sendMessage token userId randomId msg stickerId
-  --     )
-  -- showDescription (T.Help userId) = do
-  --   randomId <- liftIO randomIO
-  --   token    <- lift $ asks getToken
-  --   helpText <- asks $ BotT.helpText . BotT.config
-  --   liftIO $ Req.sendMessage token userId randomId helpText Nothing
-  --   pure ()
-  -- handleUnknownCommand (T.UnknownCommand userId) = do
-  --   randomId <- liftIO randomIO
-  --   token    <- lift $ asks getToken
-  --   helpText <- asks $ BotT.unknownCommandText . BotT.config
-  --   liftIO $ Req.sendMessage token userId randomId helpText Nothing
-  --   pure ()
-  -- askForNumberOfRepetitions (T.Repeat userId) = do
-  --   randomId   <- liftIO randomIO
-  --   token      <- lift $ asks getToken
-  --   repeatText <- asks $ BotT.repeatText . BotT.config
-  --   liftIO $ Req.sendKeyboard token userId randomId repeatText [[1, 2, 3, 4, 5]]
-  --   pure ()
-  -- confirmNumberOfRepetitions (T.Select userId times) = do
-  --   randomId <- liftIO randomIO
-  --   token    <- lift $ asks getToken
-  --   helpText <- asks $ BotT.helpText . BotT.config
-  --   liftIO $ Req.sendMessage token userId randomId (makeText times) Nothing
-  --   pure ()
-  --  where
-  --   makeText 1 = "Now I will repeat only once"
-  --   makeText 2 = "Now I will repeat twice"
-  --   makeText n = "Now I will repeat " ++ show n ++ " times"
-  -- saveNumberOfRepetitions (T.Select userId times) =
-  --   lift $ modify $ DM.insert userId times
+  sendMessage (BotT.Text text (T.Text userId T.Empty)) = do
+    token    <- asks getToken
+    randomId <- liftIO randomIO
+    liftIO $ Req.sendMessage token userId randomId text Nothing
+    pure ()
+  sendMessage (BotT.Text text (T.Text userId (T.Sticker stickerId))) = do
+    token    <- asks getToken
+    randomId <- liftIO randomIO
+    liftIO $ Req.sendMessage token userId randomId text (Just stickerId)
+    pure ()
+  sendMessage (BotT.Keyboard layout text (T.Text userId _)) = do
+    token    <- asks getToken
+    randomId <- liftIO randomIO
+    liftIO $ Req.sendKeyboard token userId randomId text layout
+    pure ()
 
 runVKBot :: BotT.Env -> IO ()
 runVKBot env = do

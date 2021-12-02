@@ -53,11 +53,13 @@ instance FromJSON EventsUpdateResponse where
           sticker <- parseSticker payload
           answer  <- parseAnswer payload
           flag    <- parseJSON flagV :: Parser Int
-          pure $ case flag .&. 2 of
-            0 -> case answer of
-              Just n  -> Answer userId n
-              Nothing -> NewMessage userId message sticker
-            _ -> Others
+          pure $ if doesMessageHaveFlag flag
+            then
+              (case answer of
+                Just n  -> Answer userId n
+                Nothing -> NewMessage userId message sticker
+              )
+            else Others
       parseNewMessage _ = pure Others
 
       parseSticker :: Object -> Parser (Maybe Int)
@@ -71,6 +73,8 @@ instance FromJSON EventsUpdateResponse where
 
       parseAnswer :: Object -> Parser (Maybe Int)
       parseAnswer o = (>>= readMaybe) <$> (o .:? "payload")
+
+      doesMessageHaveFlag flag = flag .&. 2 == 0
 
 
 

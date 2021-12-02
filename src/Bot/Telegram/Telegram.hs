@@ -37,12 +37,11 @@ instance Bot TelegramBotT Int T.Message where
         messages = foldr
           (\(Res.UpdateEvent updateId content) messages -> case content of
             Res.Text chatId msg ->
-              BotT.Message (show chatId) msg (T.Message chatId T.Empty)
-                : messages
+              BotT.Message (show chatId) msg (T.Text chatId T.Empty) : messages
             Res.Sticker chatId stickerId ->
               BotT.Message (show chatId)
                            ""
-                           (T.Message chatId $ T.Sticker stickerId)
+                           (T.Text chatId $ T.Sticker stickerId)
                 : messages
             Res.Callback chatId callbackId answer ->
               case readMaybe answer :: Maybe Int of
@@ -60,11 +59,11 @@ instance Bot TelegramBotT Int T.Message where
           where getId (Res.UpdateEvent id _) = id
 
 
-  sendMessage (BotT.Text text (T.Message chatId T.Empty)) = do
+  sendMessage (BotT.Text text (T.Text chatId T.Empty)) = do
     token <- asks getToken
     liftIO $ Req.sendMessage token chatId text
     pure ()
-  sendMessage (BotT.Text text (T.Message chatId (T.Sticker stickerId))) = do
+  sendMessage (BotT.Text text (T.Text chatId (T.Sticker stickerId))) = do
     token <- asks getToken
     liftIO $ Req.sendSticker token chatId stickerId
     pure ()
@@ -72,7 +71,7 @@ instance Bot TelegramBotT Int T.Message where
     token <- asks getToken
     liftIO $ Req.sendConfirmation token callbackId text
     pure ()
-  sendMessage (BotT.Keyboard layout text (T.Message chatId _)) = do
+  sendMessage (BotT.Keyboard layout text (T.Text chatId _)) = do
     token <- asks getToken
     liftIO $ Req.sendKeyboardLayout token chatId text layout
     pure ()
