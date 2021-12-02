@@ -1,6 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
 
 module Bot.Telegram.Telegram where
 
@@ -19,33 +18,38 @@ import qualified Bot.Telegram.Response         as Res
 import qualified Bot.Telegram.Types            as T
 import           Data.Maybe                     ( fromMaybe )
 
-type Context = ReaderT T.LocalEnv (StateT (DM.Map Int Int) IO)
 
-newtype TelegramBotT m a
+newtype TelegramBotT a
     = TelegramBotT
-    { unTelegramBotT :: ReaderT BotT.Env m a
-    } deriving (Functor, Applicative, Monad, MonadIO, MonadTrans, MonadReader BotT.Env)
+    { unTelegramBotT :: ReaderT T.LocalEnv IO a
+    } deriving (Functor, Applicative, Monad, MonadIO, MonadReader T.LocalEnv)
 
-instance Bot (TelegramBotT Context) Int T.Message T.Help T.Repeat T.Select T.UnknownCommand  where
-  getCommand lastUpdateId = do
-    token    <- lift $ asks getToken
+instance Bot TelegramBotT Int T.Message where
+  getUpdates lastUpdateId = do
+    token    <- asks getToken
     response <- liftIO $ Req.getUpdates token lastUpdateId
     case Res.parseGetUpdatesResponse $ responseBody response of
       Left  e -> error e
       Right (Res.GetUpdatesResponse updates) -> do
         liftIO $ print updates
-        pure (nextLastUpdateId, commands)
+        pure (nextLastUpdateId, messages)
        where
-        commands = foldr
-          (\(Res.UpdateEvent updateId content) commands -> case content of
-            Res.Text chatId msg -> identifyCommand chatId msg : commands
+        messages = foldr
+          (\(Res.UpdateEvent updateId content) messages -> case content of
+            Res.Text chatId msg ->
+              BotT.Message (show chatId) msg (T.Message chatId T.Empty)
+                : messages
             Res.Sticker chatId stickerId ->
-              BotT.EchoMessage (T.Sticker chatId stickerId) : commands
+              BotT.Message (show chatId)
+                           ""
+                           (T.Message chatId $ T.Sticker stickerId)
+                : messages
             Res.Callback chatId callbackId answer ->
               case readMaybe answer :: Maybe Int of
-                Just n  -> BotT.Select (T.Select callbackId chatId n) : commands
-                Nothing -> commands
-            Res.Unknown -> commands
+                Just n ->
+                  BotT.Answer (show chatId) n (T.Answer callbackId) : messages
+                Nothing -> messages
+            Res.Unknown -> messages
           )
           []
           updates
@@ -55,67 +59,28 @@ instance Bot (TelegramBotT Context) Int T.Message T.Help T.Repeat T.Select T.Unk
           else lastUpdateId
           where getId (Res.UpdateEvent id _) = id
 
-        identifyCommand chatId msg = case msg of
-          "/help"   -> BotT.Help (T.Help chatId)
-          ('/' : 'h' : 'e' : 'l' : 'p' : ' ' : _) -> BotT.Help (T.Help chatId)
-          "/repeat" -> BotT.Repeat (T.Repeat chatId)
-          -- ('/' : 'r' : 'e' : 'p' : 'e' : 'a' : 't' : ' ' : times) ->
-          --   case readMaybe times :: Maybe Int of
-          --     Just n  -> BotT.Select n
-          --     Nothing -> BotT.UnknownCommand (T.UnknownCommand chatId)
-          ['/'    ] -> BotT.EchoMessage (T.Text chatId msg)
-          ('/' : _) -> BotT.UnknownCommand (T.UnknownCommand chatId)
-          msg       -> BotT.EchoMessage (T.Text chatId msg)
 
-
-  echoMessage (T.Text chatId text) = do
-    token                      <- lift $ asks getToken
-    initialNumberOfRepetitions <- asks $ BotT.initialRepetitions . BotT.config
-    times                      <- lift $ gets $ \s ->
-      fromMaybe initialNumberOfRepetitions (DM.lookup chatId s)
-    liftIO $ replicateM_ times (Req.sendMessage token chatId text)
-  echoMessage (T.Sticker chatId stickerId) = do
-    token                      <- lift $ asks getToken
-    initialNumberOfRepetitions <- asks $ BotT.initialRepetitions . BotT.config
-    times                      <- lift $ gets $ \s ->
-      fromMaybe initialNumberOfRepetitions (DM.lookup chatId s)
-    liftIO $ forM_ [1 .. times] $ \_ -> Req.sendSticker token chatId stickerId
-
-  showDescription (T.Help chatId) = do
-    token    <- lift $ asks getToken
-    helpText <- asks $ BotT.helpText . BotT.config
-    liftIO $ Req.sendMessage token chatId helpText
+  sendMessage (BotT.Text text (T.Message chatId T.Empty)) = do
+    token <- asks getToken
+    liftIO $ Req.sendMessage token chatId text
     pure ()
-
-  handleUnknownCommand (T.UnknownCommand chatId) = do
-    token    <- lift $ asks getToken
-    helpText <- asks $ BotT.unknownCommandText . BotT.config
-    liftIO $ Req.sendMessage token chatId helpText
+  sendMessage (BotT.Text text (T.Message chatId (T.Sticker stickerId))) = do
+    token <- asks getToken
+    liftIO $ Req.sendSticker token chatId stickerId
     pure ()
-
-  askForNumberOfRepetitions (T.Repeat chatId) = do
-    token      <- lift $ asks getToken
-    repeatText <- asks $ BotT.repeatText . BotT.config
-    liftIO $ Req.sendKeyboardLayout token chatId repeatText [[1, 2, 3], [4, 5]]
+  sendMessage (BotT.Text text (T.Answer callbackId)) = do
+    token <- asks getToken
+    liftIO $ Req.sendConfirmation token callbackId text
     pure ()
-
-  saveNumberOfRepetitions (T.Select _ chatId times) =
-    lift $ modify $ DM.insert chatId times
-
-  confirmNumberOfRepetitions (T.Select callbackId _ times) = do
-    token <- lift $ asks getToken
-    liftIO $ Req.sendConfirmation token callbackId (makeText times)
+  sendMessage (BotT.Keyboard layout text (T.Message chatId _)) = do
+    token <- asks getToken
+    liftIO $ Req.sendKeyboardLayout token chatId text layout
     pure ()
-   where
-    makeText 1 = "Now I will repeat only once"
-    makeText 2 = "Now I will repeat twice"
-    makeText n = "Now I will repeat " ++ show n ++ " times"
+  sendMessage _ = pure ()
 
 
 runTelegramBot :: BotT.Env -> IO ()
 runTelegramBot env = do
   config <- liftIO readConfig
-  let bot = unTelegramBotT (runBot 0) :: ReaderT BotT.Env Context ()
-  runStateT (runReaderT (runReaderT bot env) config) mempty
-  pure ()
+  runReaderT (unTelegramBotT (runBot env 0)) config
 
