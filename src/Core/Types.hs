@@ -8,11 +8,12 @@ newtype Env = Env
   { config :: Config
   }
 
+type Preferences = Map UserID Times
+type Context m = ReaderT Env (StateT Preferences m)
+
 type Times = Int
 type UserID = String
 type Message = String
-type Preferences = Map UserID Times
-type Context m = ReaderT Env (StateT Preferences m)
 type KeyboardLayout = [[Int]]
 
 data Update msg = Message UserID Message msg | Answer UserID Times msg

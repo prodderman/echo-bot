@@ -4,6 +4,7 @@
 
 module Bot.Telegram.Request where
 
+import           Bot.Telegram.Types
 import           Control.Monad.IO.Class
 import           Data.Aeson
 import           Data.Aeson.Types
@@ -30,8 +31,6 @@ data SendConfirmation = SendConfirmation
   , text              :: String
   }
   deriving Generic
-
-newtype KeyboardLayout = KeyboardLayout [[Int]]
 
 data SendKeyboard = SendKeyboard
   { chat_id      :: Int

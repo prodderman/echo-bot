@@ -3,12 +3,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Bot.VK.VK where
+
 import           Control.Monad.Reader
-import           Control.Monad.State
-import           Data.Aeson
-import           Data.Aeson.Types
-import qualified Data.Map                      as DM
-import           Data.Maybe
 import           Network.HTTP.Req
 import           System.Random
 

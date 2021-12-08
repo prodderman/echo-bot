@@ -4,13 +4,13 @@ module Core.Bot where
 
 import           Control.Monad.Reader
 import           Control.Monad.State
-import qualified Data.Map                      as DM
+import qualified Data.Map             as DM
 import           Data.Maybe
-import           Text.Read                      ( readMaybe )
+import           Text.Read            (readMaybe)
 
 import           Core.Types
 
-class (Monad m) => Bot m payload msg | m -> payload msg where
+class Monad m => Bot m payload msg | m -> payload msg where
   getUpdates :: payload -> m (payload, [Update msg])
   sendMessage :: Event msg -> m ()
 
@@ -20,10 +20,8 @@ runBot env payload = runStateT (runReaderT (run payload) env) mempty >> pure ()
   run :: (Bot m p msg) => p -> Context m ()
   run p = do
     (nextPayload, messages) <- liftBot $ getUpdates p
-    let commands = map identifyCommand messages
-    mapM_ runCommand commands
+    mapM_ (runCommand . identifyCommand) messages
     run nextPayload
-
    where
     runCommand command = case command of
       EchoMessage id msg msgPayload  -> echoMessage msgPayload id msg
@@ -73,9 +71,10 @@ identifyCommand (Message userId msg msgPayload) = case msg of
   "/help"   -> Help msgPayload
   ('/' : 'h' : 'e' : 'l' : 'p' : ' ' : _) -> Help msgPayload
   "/repeat" -> Repeat msgPayload
-  ('/' : 'r' : 'e' : 'p' : 'e' : 'a' : 't' : ' ' : n) -> case readMaybe n of
-    Just n  -> Select userId (clamp 1 5 n) msgPayload
-    Nothing -> UnknownCommand msgPayload
+  ('/' : 'r' : 'e' : 'p' : 'e' : 'a' : 't' : ' ' : n) ->
+    case clamp 1 5 <$> readMaybe n of
+      Just n  -> Select userId n msgPayload
+      Nothing -> UnknownCommand msgPayload
   text@"/"  -> EchoMessage userId text msgPayload
   ('/' : _) -> UnknownCommand msgPayload
   text      -> EchoMessage userId text msgPayload
@@ -85,4 +84,5 @@ identifyCommand (Answer userId times msgPayload) =
 liftBot :: (Bot m p msg) => m a -> Context m a
 liftBot = lift . lift
 
+clamp :: Ord a => a -> a -> a -> a
 clamp low high a = min high (max a low)

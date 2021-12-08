@@ -1,23 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Bot.Telegram.ReadConfig where
+module Bot.Telegram.ReadConfig (readConfig, getToken) where
 
-import           Bot.Telegram.Types
-import           Core.Types
 import           Data.Aeson
-import           Data.ByteString               as B
+import           Data.ByteString as B
 
-instance FromJSON LocalEnv where
+newtype Config = Config {
+  token :: String
+}
+
+instance FromJSON Config where
   parseJSON = withObject "LocalEnv" $ \o -> do
     token <- o .: "token"
-    return $ LocalEnv token
+    return $ Config token
 
-readConfig :: IO LocalEnv
+readConfig :: IO Config
 readConfig = do
   json <- B.readFile "./src/Bot/Telegram/config.json"
   return $ case decodeStrict json of
     Just config -> config
     Nothing     -> error "Invalid Telegram configuration file"
 
-getToken :: LocalEnv -> String
 getToken = token

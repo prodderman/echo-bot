@@ -1,4 +1,6 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 module Bot.VK.Response where
 import           Control.Applicative
@@ -7,9 +9,10 @@ import           Data.Aeson.Types
 import           Data.Bits
 import           Data.Maybe
 import           Network.HTTP.Req
-import           Text.Read                      ( readMaybe )
+import           Text.Read           (readMaybe)
 
 import           Bot.Helpers
+import           Data.Text           (Text, splitOn)
 
 data LongPollServerResponse = LongPollServerResponse String String Int
 
@@ -26,17 +29,12 @@ data UpdateError = OutOfDate Int | KeyExpired | UnknownError deriving Show
 data EventsUpdateResponse = EventsUpdateSuccess Int [UpdateEvent] | EventsUpdateFail UpdateError deriving Show
 
 instance FromJSON EventsUpdateResponse where
-  parseJSON = withObject "EventsUpdateResponse" $ \o -> do
-    timestamp <- o .:? "ts"
-    case timestamp of
+  parseJSON = withObject "EventsUpdateResponse" $ \o -> o .:? "ts" >>= \case
       Nothing -> EventsUpdateFail <$> parseError o
-      Just timestamp ->
-        EventsUpdateSuccess timestamp <$> (mapM parseSuccess =<< o .: "updates")
+      Just timestamp -> EventsUpdateSuccess timestamp <$> (mapM parseSuccess =<< o .: "updates")
    where
     parseError :: Object -> Parser UpdateError
-    parseError o = do
-      code <- o .: "failed" :: Parser Int
-      case code of
+    parseError o = (o .: "failed" :: Parser Int) >>= \case
         1 -> OutOfDate <$> o .: "ts"
         2 -> pure KeyExpired
         _ -> pure UnknownError
@@ -63,9 +61,7 @@ instance FromJSON EventsUpdateResponse where
       parseNewMessage _ = pure Others
 
       parseSticker :: Object -> Parser (Maybe Int)
-      parseSticker o = do
-        mediaType <- o .:? "attach1_type" :: Parser (Maybe String)
-        case mediaType of
+      parseSticker o = (o .:? "attach1_type" :: Parser (Maybe String)) >>= \case
           Just t -> case t of
             "sticker" -> (>>= readMaybe) <$> (o .:? "attach1")
             _         -> pure Nothing
@@ -84,3 +80,7 @@ parseGetPollServerResponse res = parseEither parseJSON (responseBody res)
 
 parseGetGetUpdates :: JsonResponse Value -> Either String EventsUpdateResponse
 parseGetGetUpdates res = parseEither parseJSON (responseBody res)
+
+processLine :: (Int, Text) -> Text
+processLine (_, splitOn ":" -> [s1, s2]) = s1 <> s2
+processLine (i, s                      ) = ""
