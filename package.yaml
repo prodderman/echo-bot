@@ -1,12 +1,12 @@
-name: b
+name: echo-bot
 version: 0.1.0.0
 #synopsis:
 #description:
-homepage: https://github.com/githubuser/b#readme
+homepage: https://github.com/prodderman/echo-bot
 license: BSD3
-author: Author name here
+author: prodderman
 maintainer: example@example.com
-copyright: 2021 Author name here
+copyright: 2021 prodderman
 category: Web
 extra-source-files:
   - README.md
@@ -23,7 +23,20 @@ dependencies:
   - mtl
   - random
 
+library:
+  source-dirs: src
+
 executables:
-  b:
+  bot:
     source-dirs: src
     main: Main.hs
+    dependencies: echo-bot
+
+tests:
+  echo-bot-test:
+    main: Spec.hs
+    source-dirs: tests
+    dependencies:
+      - tasty
+      - tasty-hspec
+      - echo-bot

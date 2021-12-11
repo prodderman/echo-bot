@@ -4,27 +4,42 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Map
 
-newtype Env = Env
-  { config :: Config
-  }
+newtype Env =
+  Env
+    { config :: Config
+    }
 
 type Preferences = Map UserID Times
+
 type Context m = ReaderT Env (StateT Preferences m)
 
 type Times = Int
+
 type UserID = String
+
 type Message = String
+
 type KeyboardLayout = [[Int]]
 
-data Update msg = Message UserID Message msg | Answer UserID Times msg
-data Event msg = Text Message msg | Keyboard KeyboardLayout Message msg
-data Command msg = EchoMessage UserID Message msg | Help msg | Repeat msg | Select UserID Times msg | UnknownCommand msg
+data Update msg
+  = Message UserID Message msg
+  | Answer UserID Times msg
 
-data Config = Config
-  { helpText           :: String
-  , unknownCommandText :: String
-  , repeatText         :: String
-  , initialRepetitions :: Int
-  }
-  deriving Show
+data Event msg
+  = Text Message msg
+  | Keyboard KeyboardLayout Message msg
 
+data Command msg
+  = EchoMessage UserID Message msg
+  | Help msg
+  | Repeat msg
+  | Select UserID Times msg
+  | UnknownCommand msg
+
+data Config =
+  Config
+    { helpText           :: String
+    , unknownCommandText :: String
+    , repeatText         :: String
+    , initialRepetitions :: Int
+    }

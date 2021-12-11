@@ -1,0 +1,109 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           echo-bot
+version:        0.1.0.0
+category:       Web
+homepage:       https://github.com/prodderman/echo-bot
+author:         prodderman
+maintainer:     example@example.com
+copyright:      2021 prodderman
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+library
+  exposed-modules:
+      Bot.Helpers
+      Bot.Telegram.ReadConfig
+      Bot.Telegram.Request
+      Bot.Telegram.Response
+      Bot.Telegram.Telegram
+      Bot.Telegram.Types
+      Bot.VK.ReadConfig
+      Bot.VK.Request
+      Bot.VK.Response
+      Bot.VK.Types
+      Bot.VK.VK
+      Core.Bot
+      Core.Types
+      Main
+      ReadConfig
+  other-modules:
+      Paths_echo_bot
+  hs-source-dirs:
+      src
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , modern-uri
+    , mtl
+    , random
+    , req
+    , text
+    , transformers
+  default-language: Haskell2010
+
+executable bot
+  main-is: Main.hs
+  other-modules:
+      Bot.Helpers
+      Bot.Telegram.ReadConfig
+      Bot.Telegram.Request
+      Bot.Telegram.Response
+      Bot.Telegram.Telegram
+      Bot.Telegram.Types
+      Bot.VK.ReadConfig
+      Bot.VK.Request
+      Bot.VK.Response
+      Bot.VK.Types
+      Bot.VK.VK
+      Core.Bot
+      Core.Types
+      ReadConfig
+      Paths_echo_bot
+  hs-source-dirs:
+      src
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , echo-bot
+    , modern-uri
+    , mtl
+    , random
+    , req
+    , text
+    , transformers
+  default-language: Haskell2010
+
+test-suite echo-bot-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_echo_bot
+  hs-source-dirs:
+      tests
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , echo-bot
+    , modern-uri
+    , mtl
+    , random
+    , req
+    , tasty
+    , tasty-hspec
+    , text
+    , transformers
+  default-language: Haskell2010
