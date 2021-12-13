@@ -16,10 +16,10 @@
 ### `stack build`
 Builds the project
 
-### `stack exec b vk`
+### `stack exec bot vk`
 Runs bot for VK
 
-### `stack exec b telegram`
+### `stack exec bot telegram`
 Runs bot for Telegram
 
 ### `stack test`
